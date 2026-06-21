@@ -51,6 +51,7 @@ startup.
 | Method | Path | Action |
 | --- | --- | --- |
 | GET | `/` | API status |
+| GET | `/async-data` | Run two simulated API calls concurrently |
 | GET | `/items` | List items |
 | GET | `/items/1` | Read one item |
 | POST | `/items` | Create an item |
@@ -71,3 +72,6 @@ Example JSON body:
 
 There is no frontend, authentication, or migration layer. The purpose is to
 show the basic Flask CRUD structure with the fewest moving parts.
+
+`/async-data` demonstrates `asyncio.gather`: both one-second operations run at
+the same time, so the response takes about one second instead of two.

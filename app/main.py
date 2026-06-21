@@ -1,3 +1,5 @@
+import asyncio
+
 from flask import Flask, g, jsonify, request
 from pydantic import ValidationError
 
@@ -42,6 +44,28 @@ def read_json(schema):
 @app.get("/")
 def read_root():
     return jsonify({"message": "Flask + SQLAlchemy + MySQL CRUD API"})
+
+
+async def fetch_weather():
+    """Simulate waiting for an external weather API."""
+    await asyncio.sleep(1)
+    return {"city": "Vancouver", "temperature": 18}
+
+
+async def fetch_payment_status():
+    """Simulate waiting for an external payment API."""
+    await asyncio.sleep(1)
+    return {"status": "paid"}
+
+
+@app.get("/async-data")
+async def get_async_data():
+    # Both functions start together. Total wait is about 1 second, not 2.
+    weather, payment = await asyncio.gather(
+        fetch_weather(),
+        fetch_payment_status(),
+    )
+    return jsonify({"weather": weather, "payment": payment})
 
 
 @app.get("/items")
