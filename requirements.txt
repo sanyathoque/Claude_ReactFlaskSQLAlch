@@ -1,4 +1,5 @@
 Flask[async]
+httpx
 SQLAlchemy
 PyMySQL
 cryptography

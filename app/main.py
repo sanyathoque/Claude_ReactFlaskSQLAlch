@@ -1,5 +1,6 @@
 import asyncio
 
+import httpx
 from flask import Flask, g, jsonify, request
 from pydantic import ValidationError
 
@@ -56,25 +57,37 @@ def read_root():
     return jsonify({"message": "Flask + SQLAlchemy + MySQL CRUD API"})
 
 
-async def fetch_weather():
-    """Simulate waiting for an external weather API."""
-    await asyncio.sleep(1)
-    return {"city": "Vancouver", "temperature": 18}
+async def fetch_weather(client):
+    """Make an asynchronous HTTPS request for demonstration purposes."""
+    response = await client.get(
+        "https://httpbin.org/delay/1",
+        params={"service": "weather"},
+    )
+    response.raise_for_status()
+    return response.json()
 
 
-async def fetch_payment_status():
-    """Simulate waiting for an external payment API."""
-    await asyncio.sleep(1)
-    return {"status": "paid"}
+async def fetch_payment_status(client):
+    """Make a second asynchronous HTTPS request."""
+    response = await client.get(
+        "https://httpbin.org/delay/1",
+        params={"service": "payment"},
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 @app.get("/async-data")
 async def get_async_data():
-    # Both functions start together. Total wait is about 1 second, not 2.
-    weather, payment = await asyncio.gather(
-        fetch_weather(),
-        fetch_payment_status(),
-    )
+    # One client manages both HTTPS connections. asyncio.gather starts both
+    # requests together instead of waiting for the first before starting the
+    # second. Each demo endpoint waits one second, but together take about one.
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        weather, payment = await asyncio.gather(
+            fetch_weather(client),
+            fetch_payment_status(client),
+        )
+
     return jsonify({"weather": weather, "payment": payment})
 
 

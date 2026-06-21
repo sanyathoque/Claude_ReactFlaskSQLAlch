@@ -95,5 +95,7 @@ Example JSON body:
 There is no frontend, authentication, or migration layer. The purpose is to
 show the basic Flask CRUD structure with the fewest moving parts.
 
-`/async-data` demonstrates `asyncio.gather`: both one-second operations run at
-the same time, so the response takes about one second instead of two.
+`/async-data` uses `httpx.AsyncClient` to send two real HTTPS requests to
+`https://httpbin.org/delay/1`. `asyncio.gather` runs both one-second requests at
+the same time, so they take about one second together instead of two. The
+weather and payment names are only examples; httpbin is a public test service.
