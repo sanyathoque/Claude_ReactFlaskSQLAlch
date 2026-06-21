@@ -24,6 +24,28 @@ The files follow one easy flow:
 HTTP request -> Flask route -> schema -> CRUD function -> database
 ```
 
+## How Pydantic validation works
+
+Flask does not use Pydantic automatically. This project explicitly enforces a
+schema inside `read_json()`:
+
+```python
+validated_data = ItemCreate.model_validate(request.get_json())
+```
+
+If a required field is missing or a value has an invalid type, Pydantic raises
+`ValidationError`, and the API returns HTTP 400. If the route does not call
+`model_validate()`, Pydantic performs no validation.
+
+The three schemas have separate jobs:
+
+- `ItemCreate` validates complete POST and PUT request bodies.
+- `ItemUpdate` validates partial PATCH request bodies.
+- `ItemResponse` validates SQLAlchemy objects before returning JSON.
+
+After validation, `model_dump()` converts the Pydantic object into a dictionary
+that SQLAlchemy or Flask can use.
+
 ## Setup
 
 1. Create the MySQL database:

@@ -27,17 +27,27 @@ def close_db(error=None):
 
 
 def item_json(item):
+    """Validate a SQLAlchemy object and convert it to JSON-safe data."""
+    # model_validate checks the response against ItemResponse. model_dump then
+    # converts the validated Pydantic object into a plain dictionary.
     return schemas.ItemResponse.model_validate(item).model_dump(mode="json")
 
 
 def read_json(schema):
+    """Parse a Flask request and explicitly run Pydantic validation.
+
+    Flask does not enforce Pydantic schemas by itself. `model_validate` below
+    is the exact line that enforces required fields and declared field types.
+    """
     data = request.get_json(silent=True)
     if data is None:
         return None, (jsonify({"error": "JSON body required"}), 400)
 
     try:
+        # Success: return a validated Pydantic object to the route.
         return schema.model_validate(data), None
     except ValidationError as error:
+        # Failure: convert Pydantic's errors into an HTTP 400 JSON response.
         return None, (jsonify({"errors": error.errors(include_url=False)}), 400)
 
 
@@ -100,6 +110,8 @@ def replace_item(item_id):
     if error:
         return error
 
+    # item_data is already validated. Convert it into the update schema used
+    # by the shared CRUD update function.
     update = schemas.ItemUpdate(**item_data.model_dump())
     item = crud.update_item(get_db(), item_id, update)
     if item is None:

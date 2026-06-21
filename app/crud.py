@@ -12,6 +12,8 @@ def get_item(db: Session, item_id: int):
 
 
 def create_item(db: Session, item: schemas.ItemCreate):
+    # item is already validated by Pydantic. model_dump converts it to a dict
+    # whose keys can be passed to the SQLAlchemy model constructor.
     db_item = models.Item(**item.model_dump())
     db.add(db_item)
     db.commit()
@@ -24,6 +26,8 @@ def update_item(db: Session, item_id: int, item: schemas.ItemUpdate):
     if db_item is None:
         return None
 
+    # exclude_unset=True returns only fields included in the PATCH request,
+    # preventing omitted fields from being overwritten with default values.
     for field, value in item.model_dump(exclude_unset=True).items():
         setattr(db_item, field, value)
 
