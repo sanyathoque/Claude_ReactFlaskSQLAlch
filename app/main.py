@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import contextmanager
 
 import httpx
 from flask import Flask, g, jsonify, request
@@ -9,9 +8,17 @@ from app import crud, models, schemas
 from app.database import SessionLocal, engine
 
 
-# ---------------------------------------------------------------------------
-# Flask application setup
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# WHY FLASK (vs FastAPI)
+# ===========================================================================
+# FastAPI is a modern async-first framework that handles validation,
+# serialization, and dependency injection automatically via Python type
+# hints. Flask is a minimalist micro-framework -- it provides the request/
+# response lifecycle but NOTHING else. Every feature FastAPI gives "for
+# free" must be written by hand in Flask, which is why this file has
+# explicit helpers like `read_json()` and `item_json()` that do not exist
+# in the FastAPI version.
+# ===========================================================================
 
 app = Flask(__name__)
 
@@ -23,9 +30,15 @@ models.Base.metadata.create_all(bind=engine)
 # ---------------------------------------------------------------------------
 # Database session management
 # ---------------------------------------------------------------------------
-# Flask's `g` object stores request-scoped globals. We use it to hold a single
-# SQLAlchemy Session per request, ensuring the same session is reused across
-# multiple CRUD calls within one route.
+# WHY THIS EXISTS:
+#   FastAPI uses `Depends(get_db)` with a generator. Flask has no built-in
+#   dependency injection, so we store the session in Flask's `g` object
+#   (request-scoped globals) and clean it up in teardown_appcontext.
+#
+#   We also call get_db() ONCE per route and pass the same session to all
+#   CRUD functions. In the original code, `get_db()` was called inline as
+#   an argument to each CRUD call, which could create multiple sessions per
+#   request if the CRUD function made nested calls.
 # ---------------------------------------------------------------------------
 
 def get_db():
@@ -38,6 +51,12 @@ def get_db():
 @app.teardown_appcontext
 def close_db(error=None):
     """Close the database session at the end of each request.
+
+    WHY THIS EXISTS:
+        FastAPI's `Depends()` automatically closes the session when the
+        generator yields. Flask has no equivalent, so we use the
+        teardown_appcontext hook to guarantee cleanup even if the route
+        raises an unhandled exception.
 
     If an unhandled exception occurred during the request (`error` is not None),
     roll back any uncommitted changes before closing to prevent partial writes.
@@ -52,13 +71,20 @@ def close_db(error=None):
 # ---------------------------------------------------------------------------
 # Helper utilities
 # ---------------------------------------------------------------------------
+# WHY THESE EXIST:
+#   FastAPI automatically validates request bodies against Pydantic schemas
+#   and serializes response models to JSON. Flask does neither -- it only
+#   parses raw JSON. These helpers bridge that gap.
+# ---------------------------------------------------------------------------
 
 def item_json(item):
     """Validate a SQLAlchemy object and convert it to JSON-safe data.
 
-    model_validate checks the ORM instance against ItemResponse.
-    model_dump then converts the validated Pydantic object into a plain
-    dictionary with JSON-compatible types (e.g., datetime -> ISO string).
+    WHY THIS EXISTS:
+        FastAPI's `response_model=schemas.ItemResponse` does this automatically.
+        In Flask, SQLAlchemy objects contain types like datetime and Decimal
+        that are not JSON-serializable. We must explicitly run the ORM object
+        through a Pydantic model to get a plain dict with JSON-compatible types.
     """
     return schemas.ItemResponse.model_validate(item).model_dump(mode="json")
 
@@ -66,8 +92,11 @@ def item_json(item):
 def read_json(schema):
     """Parse a Flask request body and explicitly run Pydantic validation.
 
-    Flask does NOT enforce Pydantic schemas by itself. This helper is the
-    exact point where required fields and declared types are enforced.
+    WHY THIS EXISTS:
+        FastAPI enforces Pydantic schemas natively -- if a client sends invalid
+        data, FastAPI returns a 422 error automatically. Flask has no concept
+        of schema validation; it only gives you the raw parsed JSON. This
+        helper is the exact line that enforces required fields and types.
 
     Returns:
         (validated_object, None) on success
@@ -78,10 +107,8 @@ def read_json(schema):
         return None, (jsonify({"error": "JSON body required"}), 400)
 
     try:
-        # Success: return a validated Pydantic object to the route.
         return schema.model_validate(data), None
     except ValidationError as error:
-        # Failure: convert Pydantic's errors into an HTTP 400 JSON response.
         return None, (jsonify({"errors": error.errors(include_url=False)}), 400)
 
 
@@ -96,11 +123,14 @@ def read_root():
 
 
 # ---------------------------------------------------------------------------
-# Async demo endpoints
+# Async demo endpoint
 # ---------------------------------------------------------------------------
-# These demonstrate concurrent async HTTP requests using httpx and asyncio.
-# NOTE: Flask's default WSGI server runs async routes in a thread pool.
-# For true async performance in production, use an ASGI server (e.g., Hypercorn).
+# WHY THIS IS DIFFERENT:
+#   FastAPI is built on Starlette (ASGI), so async routes run natively in the
+#   event loop. Flask is WSGI-based; its default server runs async routes in a
+#   thread pool. The code looks similar, but under the hood FastAPI is truly
+#   concurrent while Flask is emulating it. For production async Flask,
+#   deploy with an ASGI adapter like Hypercorn.
 # ---------------------------------------------------------------------------
 
 async def fetch_weather(client: httpx.AsyncClient):
@@ -144,6 +174,14 @@ async def get_async_data():
 # ---------------------------------------------------------------------------
 # CRUD: READ
 # ---------------------------------------------------------------------------
+# WHY THESE ARE DIFFERENT FROM FASTAPI:
+#   FastAPI routes declare `db: Session = Depends(get_db)` as a parameter.
+#   The framework injects the session automatically. Flask has no DI system,
+#   so we call get_db() manually inside each route and pass it explicitly.
+#
+#   FastAPI also auto-serializes with `response_model=list[schemas.ItemResponse]`.
+#   Flask returns a raw Response object, so we manually build the JSON list.
+# ---------------------------------------------------------------------------
 
 @app.get("/items")
 def list_items():
@@ -170,6 +208,13 @@ def read_item(item_id):
 # ---------------------------------------------------------------------------
 # CRUD: CREATE
 # ---------------------------------------------------------------------------
+# WHY THIS IS DIFFERENT FROM FASTAPI:
+#   FastAPI: `def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db))`
+#   The framework validates `item` automatically and injects `db`.
+#
+#   Flask: We must manually call `read_json(schemas.ItemCreate)` to validate
+#   the body, check for errors, and only then pass the validated data to CRUD.
+# ---------------------------------------------------------------------------
 
 @app.post("/items")
 def create_item():
@@ -185,6 +230,14 @@ def create_item():
 
 # ---------------------------------------------------------------------------
 # CRUD: UPDATE
+# ---------------------------------------------------------------------------
+# WHY PUT vs PATCH IS DIFFERENT FROM FASTAPI:
+#   FastAPI distinguishes them by schema type alone:
+#     PUT  -> item: schemas.ItemCreate     (all fields required)
+#     PATCH -> item: schemas.ItemUpdate    (fields optional)
+#
+#   In Flask we do the same logic, but we must manually wire the schema
+#   validation via read_json() instead of relying on the framework.
 # ---------------------------------------------------------------------------
 
 @app.put("/items/<int:item_id>")
@@ -226,6 +279,13 @@ def update_item(item_id):
 
 # ---------------------------------------------------------------------------
 # CRUD: DELETE
+# ---------------------------------------------------------------------------
+# WHY THIS IS DIFFERENT FROM FASTAPI:
+#   FastAPI raises HTTPException(status_code=404) and the framework converts
+#   it to a JSON error response automatically.
+#
+#   Flask has no HTTPException abstraction, so we manually construct the
+#   jsonify response tuple with the status code.
 # ---------------------------------------------------------------------------
 
 @app.delete("/items/<int:item_id>")
