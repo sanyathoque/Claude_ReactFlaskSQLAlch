@@ -74,7 +74,7 @@ def update_item(db: Session, item_id: int, item: schemas.ItemUpdate):
     #   This is what the client wants to store in the database.
 
     
-    setattr(db_item, field, value)
+      setattr(db_item, field, value)
     # setattr(object, name, value) — Python's built-in for dynamic attribute assignment.
     #   object = db_item (the SQLAlchemy instance to modify)
     #   name   = field  (the attribute name as a string, e.g. "price")
