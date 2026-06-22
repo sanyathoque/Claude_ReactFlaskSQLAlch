@@ -14,6 +14,16 @@ def get_item(db: Session, item_id: int):
 def create_item(db: Session, item: schemas.ItemCreate):
     # item is already validated by Pydantic. model_dump converts it to a dict
     # whose keys can be passed to the SQLAlchemy model constructor.
+
+    
+    # item.model_dump() — Pydantic v2 method (replaces v1's .dict()).
+    #   Converts the Pydantic model to a plain Python dict, e.g.:
+    #   {"name": "Widget", "price": 19.99, "in_stock": True}
+    # **item.model_dump() — unpacks that dict as keyword arguments.
+    #   Equivalent to: models.Item(name="Widget", price=19.99, in_stock=True)
+    # models.Item(...) — constructs a SQLAlchemy ORM instance in memory only.
+    #   At this point the object is "transient": it exists in Python but is NOT in the database
+    #   and is NOT tracked by any Session. Auto-generated fields (id, created_at) are still None.
     db_item = models.Item(**item.model_dump())
     db.add(db_item)
     db.commit()
