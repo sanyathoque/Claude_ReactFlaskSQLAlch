@@ -26,7 +26,7 @@ def create_item(db: Session, item: schemas.ItemCreate):
     #   and is NOT tracked by any Session. Auto-generated fields (id, created_at) are still None.
     
 # Approach A: manual mapping (brittle, violates DRY)
-    db_item = models.Item(
+    db_item = models.Item( 
     name=item.name,
     price=item.price,
     in_stock=item.in_stock,
