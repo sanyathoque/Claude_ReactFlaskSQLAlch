@@ -24,7 +24,18 @@ def create_item(db: Session, item: schemas.ItemCreate):
     # models.Item(...) — constructs a SQLAlchemy ORM instance in memory only.
     #   At this point the object is "transient": it exists in Python but is NOT in the database
     #   and is NOT tracked by any Session. Auto-generated fields (id, created_at) are still None.
+
+    # Approach A: manual mapping (brittle, violates DRY)
+    db_item = models.Item(
+    name=item.name,
+    price=item.price,
+    in_stock=item.in_stock,
+    # If schemas.ItemCreate adds a new field, you must update this too
+)
+
+# Approach B: unpacking (automatic, maintainable)
     db_item = models.Item(**item.model_dump())
+    
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
