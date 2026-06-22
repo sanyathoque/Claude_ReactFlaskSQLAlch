@@ -14,7 +14,7 @@ class ItemBase(BaseModel):
 
     # Pydantic requires name and checks/converts the declared field types.
     name: str
-    description: str | None = None
+    description: str | None = None. # Optional — can be omitted or null
     price: float = 0.0
     in_stock: bool = True
 
